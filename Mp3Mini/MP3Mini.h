@@ -56,7 +56,7 @@ public:
     void send_cmd(u8 *cmd);
 	
 	/** MP3 receive function */
-    u8 receive_cmd(u8 *cmd);
+    u8 receive_cmd();
     
 	/** play next music */
     void next();
@@ -80,7 +80,7 @@ public:
 forward_play(void) is to play forward backward
 To send again make it back to playing normally
 *****************************************/
-	void forward_play();
+void forward_play();
 	
 /****************************************
 backward_play(void) is to play fast backward
@@ -102,8 +102,11 @@ file name should be less than 8 bytes.
 folder name is 5 bytes.
 to play "yellow.mp3", play("yellow").
 to play "yellow.mp3" under foler "MUSIC", play("MUSIC/yellow").
+Return
+00: playing
+0E: no file found
 ***************************************************************/
-void play(const char* fileName);
+u8 play(const char* fileName);
 
 /**************************************************************
 set recording
@@ -149,10 +152,24 @@ Check working state
 u8 check_working();    
     
 /**************************************************************
-Check file amount in storage
+Check if file exist
+To check "yellow.mp3" in root dictionary, check_exist("yellow");
+To check "yellow.mp3" in certain folder such as "Music", check_exist("Music/yellow");
+return:
+00: yes
+01: no
+
 ***************************************************************/
-u16 check_files();    
-    
+u8 check_files(const char* fileName);    
+
+
+/**************************************************************
+Check file quantity in storage
+To check all the files in the media, check_files("~all~");
+To check the files in certain folder such as "Music", check_files("MUSIC");
+
+***************************************************************/
+u16 file_qty(const char* fileName);    
 
 /**************************************************************
 Check file currently playing, return file index number
@@ -166,7 +183,28 @@ Return in Mbyte
 u16 check_freeSpace();  
 
 
+/**************************************************************
+file name should be no more than 8 bytes.
+folder name is 5 bytes.
+to delete "yellow.mp3", delete_file("yellow").
+to delete "yellow.mp3" under foler "MUSIC", delete_file("MUSIC/yellow").
+to delete all the audio files in the storage, delete_file("~all~");
+***************************************************************/
+void delete_file(const char* fileName);
 
+
+/**************************************************************
+Check media State
+Return:
+00: SD card and U disk in 
+01: SD card in, U disk out
+02: SD card out, U disk in 
+03: SD card or U disk out
+***************************************************************/
+u8 check_media();
+	
+
+	
 	
 	
 private:

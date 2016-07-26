@@ -1,19 +1,19 @@
 /*****************************************************************************/
 /**
-	@file    	MP3.cpp
+	@file    	MP3Mini.cpp
 	@author  	ELECHOUSE
 	@version 	V1.0
 	@brief      head file for Mp3mini module
 	
 	@section  HISTORY
-	V1.0	2012-08-02	Initial version.
+	V1.0	2016-08-02	Initial version.
 	
-	Copyright (c) 2012 www.elechouse.com  All right reserved.
+	Copyright (c) 2016 www.elechouse.com  All right reserved.
 */
 /*****************************************************************************/
 #include "MP3Mini.h"
 
-SoftwareSerial COM_SOFT(7, 8);
+SoftwareSerial COM_SOFT(7, 8); //change pins for softserial here
 
 MP3::MP3()
 {
@@ -43,8 +43,17 @@ void MP3::send_cmd(u8 *cmd)
     cmd[length-1] = 0xEF;
 	cmd[length-2] = 0x00;
 	for(i=1; i<length-2; i++){
-		cmd[length-2]= (cmd[length-2]+cmd[i])||0xFF;
+		cmd[length-2]= (cmd[length-2]+cmd[i])&0xFF;
     }
+	
+	//clear receiving buffer
+	if(serial_type == MP3_HARDWARE_SERIAL){
+			COM.flush();
+		}else{
+			while(COM_SOFT.available())
+				COM_SOFT.read();
+	}
+	
     for(i=0; i<length; i++){
 		if(serial_type == MP3_HARDWARE_SERIAL){
 			COM.write(cmd[i]);
@@ -52,12 +61,14 @@ void MP3::send_cmd(u8 *cmd)
 			COM_SOFT.write(cmd[i]);
 		}
     }
+	delay(100);
 }
 
 /** MP3 receive function */
-u8 receive_cmd(u8 *cmd)
-{
-	switch (serial_type){
+u8 MP3::receive_cmd()
+{	
+	serial_type_t st = serial_type;
+	switch (st){
 		case MP3_HARDWARE_SERIAL:
 			if (COM.available())
 			return COM.read();
@@ -165,19 +176,20 @@ folder name is 5 bytes.
 to play "yellow.mp3", play("yellow").
 to play "yellow.mp3" under foler "MUSIC", play("MUSIC/yellow").
 ***************************************************************/
-void MP3::play(const char* fileName)
+u8 MP3::play(const char* fileName)
 {		
 		char file[strlen(fileName)+1];
 		strcpy(file, fileName);
 		u8 file_len=strlen(fileName);
 		
-		//COM.println(file);
-		/*
-		COM.println(file_len);
-		*/
-		cmd_buf[2]=0xA5;
+		for(int i=0; i<sizeof(file);i++){
+		if (file[i]>0x60&&file[i]<0x7A)
+		file[i]=file[i]-0x20;
+		}
+		
 	if((file_len>6)&&(file[5]=='/')){
 		cmd_buf[1]=0x02 + file_len;
+		cmd_buf[2]=0xA5;
 		cmd_buf[3]=file[0];
 		cmd_buf[4]=file[1];
 		cmd_buf[5]=file[2];
@@ -189,12 +201,14 @@ void MP3::play(const char* fileName)
 	}
 	else{
 		cmd_buf[1]=0x03 + file_len;
+		cmd_buf[2]=0xA3;
 		for(int i=0;i<(file_len);i++){
 			cmd_buf[i+3]=file[i];
 		}
 	}
 	
 	send_cmd(cmd_buf);
+	return receive_cmd();
 }
 
 /**************************************************************
@@ -205,7 +219,7 @@ mode:
 02: External Dual-channel AUX (AUX_L and AUX_R) signal input with 
 gain 3DB (stereo input)
 ***************************************************************/
-void recording_scr(u8 mode){
+void MP3::recording_scr(u8 mode){
 	cmd_buf[1]=0x04;
     cmd_buf[2]=0xD3;
     cmd_buf[3]=mode;
@@ -220,7 +234,7 @@ rate:
 02:  64KPBS
 03:  32KPBS
 ***************************************************************/
-void recording_rate(u8 rate){
+void MP3::recording_rate(u8 rate){
 	cmd_buf[1]=0x04;
     cmd_buf[2]=0xD4;
     cmd_buf[3]=rate;
@@ -234,12 +248,16 @@ folder name is 5 bytes.
 to record "yellow.mp3", record("yellow").
 to record "yellow.mp3" under foler "MUSIC", record("MUSIC/yellow").
 ***************************************************************/
-void record(const char* fileName)
+void MP3::record(const char* fileName)
 {		
 		char file[strlen(fileName)+1];
 		strcpy(file, fileName);
 		u8 file_len=strlen(fileName);
 		
+		for(int i=0; i<sizeof(file);i++){
+		if (file[i]>0x60&&file[i]<0x7A)
+		file[i]=file[i]-0x20;
+		}
 		//COM.println(file);
 		/*
 		COM.println(file_len);
@@ -269,7 +287,7 @@ void record(const char* fileName)
 /**************************************************************
 Stop recording
 ***************************************************************/
-void record_stop(){
+void MP3::record_stop(){
 	cmd_buf[1]=0x03;
     cmd_buf[2]=0xD9;
     send_cmd(cmd_buf);
@@ -282,7 +300,7 @@ to delete "yellow.mp3", delete_file("yellow").
 to delete "yellow.mp3" under foler "MUSIC", delete_file("MUSIC/yellow").
 to delete all the audio files in the storage, delete_file("~all~");
 ***************************************************************/
-void delete_file(const char* fileName)
+void MP3::delete_file(const char* fileName)
 {	
 	if (strcmp(fileName, "~all~")){
 	cmd_buf[1]=0x03;
@@ -293,12 +311,13 @@ void delete_file(const char* fileName)
 		strcpy(file, fileName);
 		u8 file_len=strlen(fileName);
 		
-		//COM.println(file);
-		/*
-		COM.println(file_len);
-		*/
+		for(int i=0; i<sizeof(file);i++){
+		if (file[i]>0x60&&file[i]<0x7A)
+		file[i]=file[i]-0x20;
+		}
+		
 		cmd_buf[2]=0xD7;
-	if((file_len>6)&&(file[5]=='/')){
+		if((file_len>6)&&(file[5]=='/')){
 		cmd_buf[1]=0x02 + file_len;
 		cmd_buf[3]=file[0];
 		cmd_buf[4]=file[1];
@@ -322,7 +341,7 @@ void delete_file(const char* fileName)
 /**************************************************************
 Check current volume
 ***************************************************************/
-u8 check_volume()
+u8 MP3::check_volume()
 {	cmd_buf[1]=0x03;
     cmd_buf[2]=0xC1;
     send_cmd(cmd_buf);
@@ -336,7 +355,7 @@ u8 check_volume()
 /**************************************************************
 Check working state
 ***************************************************************/
-u8 check_working()
+u8 MP3::check_working()
 {	cmd_buf[1]=0x03;
     cmd_buf[2]=0xC2;
     send_cmd(cmd_buf);
@@ -354,7 +373,7 @@ To check all the files in the media, check_files("~all~");
 To check the files in certain folder such as "Music", check_files("MUSIC");
 
 ***************************************************************/
-u16 check_files(const char* fileName)
+u16 MP3::file_qty(const char* fileName)
 {
 	u16 result;
 	if (strcmp(fileName, "~all~")){
@@ -363,12 +382,21 @@ u16 check_files(const char* fileName)
 	}
 	else{
 		cmd_buf[1]=8;
+		cmd_buf[2]=0xC6;
+		
+		char file[strlen(fileName)+1];
+		strcpy(file, fileName);
+		for(int i=0; i<strlen(fileName);i++){
+		if (file[i]>0x60&&file[i]<0x7A)
+		file[i]=file[i]-0x20;
+		}
+		
 		for(int i=0;i<5;i++){
 			cmd_buf[i+3]=file[i];
 		}
 	}
 	send_cmd(cmd_buf);
-	if (receive_cmd()==0xc3)
+	if (receive_cmd()==0xc5)
 	{ 
 		result = receive_cmd();
 		result = (result<<8)+receive_cmd();
@@ -382,7 +410,7 @@ u16 check_files(const char* fileName)
 /**************************************************************
 Check file currently playing, return file index number
 ***************************************************************/
-u8 check_playingMusic()
+u8 MP3::check_playingMusic()
 {
 	cmd_buf[1]=0x03;
     cmd_buf[2]=0xC9;
@@ -401,12 +429,13 @@ Return:
 02: SD card out, U disk in 
 03: SD card or U disk out
 ***************************************************************/
-u8 check_media()
+u8 MP3::check_media()
 {
 	cmd_buf[1]=0x03;
     cmd_buf[2]=0xCA;
     send_cmd(cmd_buf);
-	if (receive_cmd()==0xc9)
+	
+	if (receive_cmd()==0xCA)
 	return receive_cmd();
 	else
 	return 0xFF;
@@ -418,11 +447,19 @@ To check "yellow.mp3" in root dictionary, check_exist("yellow");
 To check "yellow.mp3" in certain folder such as "Music", check_exist("Music/yellow");
 
 ***************************************************************/
-u16 check_files(const char* fileName)
+u8 MP3::check_files(const char* fileName)
 {
 	char file[strlen(fileName)+1];
 	strcpy(file, fileName);
 	u8 file_len=strlen(fileName);
+	
+	for(int i=0; i<sizeof(file);i++){
+		if (file[i]>0x60&&file[i]<0x7A)
+		file[i]=file[i]-0x20;
+		}
+		
+	//Serial.println(file);
+		
 	if((file_len>6)&&(file[5]=='/')){
 		cmd_buf[1]=0x02 + file_len;
 		cmd_buf[2]=0xCC;
@@ -434,29 +471,29 @@ u16 check_files(const char* fileName)
 		for(int i=6;i<file_len;i++){
 			cmd_buf[i+2]=file[i];
 		}
+
 	}
 	else{
 		cmd_buf[1]=0x03 + file_len;
 		cmd_buf[2]=0xCB;
 		for(int i=0;i<(file_len);i++){
 			cmd_buf[i+3]=file[i];
+			}
+		
 		}
-	}
-
 	send_cmd(cmd_buf);
-	if (receive_cmd()==0xc3)
-	{ 
-		return receive_cmd();
-	}
-	else
-		return 0xFF;
+	u8 cmd = receive_cmd();
+	//Serial.print("check file 1st byte:");
+	//Serial.print(cmd,HEX);
+	return cmd;
+	
 }
 
 /**************************************************************
 Check free space
 Return in Mbyte
 ***************************************************************/
-u16 check_freeSpace()
+u16 MP3::check_freeSpace()
 {
 	u16 result;
 	
